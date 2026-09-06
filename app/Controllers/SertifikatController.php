@@ -179,6 +179,98 @@ class SertifikatController extends BaseController
         exit(); 
     }
 
+    /**
+     * Endpoint untuk menyajikan gambar background template mentah
+     */
+    public function rawTemplate()
+    {
+        $config = $this->configModel->getConfig();
+        if (!$config || empty($config['template_gambar'])) {
+            return $this->response->setStatusCode(404, 'Template not set');
+        }
+
+        $path = WRITEPATH . 'uploads/' . $config['template_gambar'];
+        if (!file_exists($path)) {
+            return $this->response->setStatusCode(404, 'File not found');
+        }
+
+        $mime = mime_content_type($path) ?: 'image/jpeg';
+        return $this->response
+            ->setHeader('Content-Type', $mime)
+            ->setBody(file_get_contents($path));
+    }
+
+    /**
+     * Endpoint untuk menyajikan gambar tanda tangan mentah (PNG transparan)
+     */
+    public function rawTtd(string $type)
+    {
+        $config = $this->configModel->getConfig();
+        if (!$config) {
+            return $this->response->setStatusCode(404, 'Config not found');
+        }
+
+        $field = ($type === 'kepala') ? 'ttd_kepala_lab' : 'ttd_ketua_prodi';
+        $file = $config[$field] ?? null;
+
+        if (empty($file)) {
+            return $this->response->setStatusCode(404, 'Signature image not set');
+        }
+
+        $path = WRITEPATH . 'uploads/' . $file;
+        if (!file_exists($path)) {
+            return $this->response->setStatusCode(404, 'File not found');
+        }
+
+        return $this->response
+            ->setHeader('Content-Type', 'image/png')
+            ->setBody(file_get_contents($path));
+    }
+
+    /**
+     * Endpoint untuk menyimpan payload JSON koordinat tata letak baru
+     */
+    public function saveLayout()
+    {
+        $config = $this->configModel->getConfig();
+        if (!$config) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Konfigurasi sertifikat belum dibuat. Buat konfigurasi terlebih dahulu.'
+            ])->setStatusCode(404);
+        }
+
+        try {
+            $layout = $this->request->getJSON(true);
+        } catch (\Exception $e) {
+            $layout = null;
+        }
+
+        if (empty($layout)) {
+            $layout = json_decode($this->request->getPost('layout'), true);
+        }
+
+        if (empty($layout)) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Data koordinat tidak valid.'
+            ])->setStatusCode(400);
+        }
+
+        $updatedData = [
+            'layout_config' => json_encode($layout),
+            'updated_at'    => date('Y-m-d H:i:s')
+        ];
+
+        $this->configModel->update($config['id'], $updatedData);
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'message' => 'Tata letak sertifikat berhasil disimpan.'
+        ]);
+    }
+
+
     // =========================================================================
     // HELPER: Penangkap ID User Multi-Jalur (Mendukung uid & id)
     // =========================================================================
@@ -394,105 +486,182 @@ class SertifikatController extends BaseController
         $imgWidth  = imagesx($canvas);
         $imgHeight = imagesy($canvas);
         
-        $fontPath = FCPATH . 'assets/fonts/OpenSans-Bold.ttf';
-        
-        if (!file_exists($fontPath)) {
-            $fontPath = '/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf'; 
-            if (!file_exists($fontPath)) {
-                $fontPath = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'; 
-            }
+        // Font dictionary mapping
+        $fontMap = [
+            'OpenSans-Bold'        => FCPATH . 'assets/fonts/OpenSans-Bold.ttf',
+            'OpenSans-Regular'     => FCPATH . 'assets/fonts/OpenSans-Regular.ttf',
+            'Montserrat-Bold'      => FCPATH . 'assets/fonts/Montserrat-Bold.ttf',
+            'PlayfairDisplay-Bold' => FCPATH . 'assets/fonts/PlayfairDisplay-Bold.ttf',
+            'Cinzel-Bold'          => FCPATH . 'assets/fonts/Cinzel-Bold.ttf',
+            'GreatVibes-Regular'   => FCPATH . 'assets/fonts/GreatVibes-Regular.ttf',
+            'Poppins-Bold'         => FCPATH . 'assets/fonts/Poppins-Bold.ttf',
+            'Poppins-Regular'      => FCPATH . 'assets/fonts/Poppins-Regular.ttf',
+        ];
+
+        // Decode layout_config dari database
+        $layout = [];
+        if (!empty($config['layout_config'])) {
+            $layout = json_decode($config['layout_config'], true) ?: [];
         }
-        $hasFont = file_exists($fontPath);
+
+        // Helper untuk mendapatkan path font yang valid
+        $getFontPath = function(string $key, string $defaultFontKey = 'OpenSans-Bold') use ($layout, $fontMap) {
+            $fontKey = $layout[$key]['font_family'] ?? $defaultFontKey;
+            if (isset($fontMap[$fontKey]) && file_exists($fontMap[$fontKey])) {
+                return $fontMap[$fontKey];
+            }
+            if (isset($fontMap[$defaultFontKey]) && file_exists($fontMap[$defaultFontKey])) {
+                return $fontMap[$defaultFontKey];
+            }
+            return FCPATH . 'assets/fonts/OpenSans-Bold.ttf';
+        };
         
         $colorBlack = imagecolorallocate($canvas, 30, 30, 30);
         $colorGray  = imagecolorallocate($canvas, 80, 80, 80);
         $colorLine  = imagecolorallocate($canvas, 180, 150, 80);
 
         $scale = $imgWidth / 2000;
-        
-        $fsJudul    = 70 * $scale;  
-        $fsPreamble = 28 * $scale;  
-        $fsNama     = 100 * $scale; 
-        $fsNrp      = 28 * $scale;  
-        $fsDesc     = 26 * $scale;  
-        $fsSig      = 24 * $scale;  
 
-        $printCenter = function($text, $fontSize, $y, $color) use ($canvas, $fontPath, $hasFont, $imgWidth) {
-            if ($hasFont) {
-                $bbox = imagettfbbox($fontSize, 0, $fontPath, $text);
+        // Helper untuk mendapatkan koordinat piksel berdasarkan persentase
+        $getCoords = function(string $key, float $defaultX, float $defaultY) use ($layout, $imgWidth, $imgHeight) {
+            $xPct = isset($layout[$key]['x_pct']) ? (float)$layout[$key]['x_pct'] : $defaultX * 100;
+            $yPct = isset($layout[$key]['y_pct']) ? (float)$layout[$key]['y_pct'] : $defaultY * 100;
+            return [
+                (int) (($xPct / 100) * $imgWidth),
+                (int) (($yPct / 100) * $imgHeight)
+            ];
+        };
+
+        // Helper untuk mendapatkan ukuran font dinamis
+        $getFontSize = function(string $key, float $defaultVal) use ($layout, $scale) {
+            $baseVal = isset($layout[$key]['font_size']) ? (float)$layout[$key]['font_size'] : $defaultVal;
+            return $baseVal * $scale;
+        };
+
+        // Helper fungsi mencetak teks center-aligned dengan baseline matching yang presisi
+        $printCenteredText = function($text, $fontSize, $fontFile, $centerX, $y, $color) use ($canvas) {
+            if (empty($text)) return;
+            if (file_exists($fontFile)) {
+                $bbox = imagettfbbox($fontSize, 0, $fontFile, $text);
                 $txtWidth = abs($bbox[2] - $bbox[0]);
-                $x = (int) (($imgWidth - $txtWidth) / 2);
-                imagettftext($canvas, $fontSize, 0, $x, $y, $color, $fontPath, $text);
+                $x = (int) ($centerX - ($txtWidth / 2));
+                // $bbox[7] adalah offset Y sudut kiri atas dari baseline (nilai negatif)
+                $yDraw = (int) ($y - $bbox[7]);
+                imagettftext($canvas, $fontSize, 0, $x, $yDraw, $color, $fontFile, $text);
             } else {
                 $charWidth = imagefontwidth(5) * strlen($text);
-                $x = (int) (($imgWidth - $charWidth) / 2);
+                $x = (int) ($centerX - ($charWidth / 2));
                 imagestring($canvas, 5, $x, $y, $text, $color);
             }
         };
-        
-        $judul = strtoupper($config['judul'] ?? 'SERTIFIKAT APRESIASI');
-        $printCenter($judul, $fsJudul, (int)($imgHeight * 0.22), $colorBlack);
 
-        $preamble = "Dengan bangga dipersembahkan kepada:";
-        $printCenter($preamble, $fsPreamble, (int)($imgHeight * 0.32), $colorGray);
-
-        $printCenter($namaUser, $fsNama, (int)($imgHeight * 0.44), $colorBlack);
-
-        $lineY = (int)($imgHeight * 0.48);
-        $lineStartX = (int)($imgWidth * 0.25);
-        $lineEndX = (int)($imgWidth * 0.75);
-        imagesetthickness($canvas, max(2, (int)(4 * $scale)));
-        imageline($canvas, $lineStartX, $lineY, $lineEndX, $lineY, $colorLine);
-
-        $printCenter($nrpUser, $fsNrp, (int)($imgHeight * 0.53), $colorBlack);
-
-        $deskripsi = $config['deskripsi_template'] ?? '';
-        $wrappedDesc = wordwrap($deskripsi, 75, "\n"); 
-        $descLines = explode("\n", $wrappedDesc);
-        $yDesc = (int)($imgHeight * 0.60);
-        $lineHeightDesc = (int)(45 * $scale);
-        
-        foreach ($descLines as $line) {
-            $printCenter(trim($line), $fsDesc, $yDesc, $colorBlack);
-            $yDesc += $lineHeightDesc;
-        }
-        
-        $yTtdImg  = (int)($imgHeight * 0.70);
-        $yTtdName = (int)($imgHeight * 0.86);
-        $yTtdRole = (int)($imgHeight * 0.89);
-
-        $xLeftCenter  = (int)($imgWidth * 0.30);
-        $xRightCenter = (int)($imgWidth * 0.70);
-
-        $printSigText = function($text, $fontSize, $centerX, $y, $color) use ($canvas, $fontPath, $hasFont) {
-            if (empty($text)) return;
-            
-            if ($hasFont) {
-                $bbox = imagettfbbox($fontSize, 0, $fontPath, $text);
-                $txtWidth = abs($bbox[2] - $bbox[0]);
-                $x = (int) ($centerX - ($txtWidth / 2));
-                imagettftext($canvas, $fontSize, 0, $x, $y, $color, $fontPath, $text);
-            } else {
-                $charWidth = imagefontwidth(4) * strlen($text);
-                $x = (int) ($centerX - ($charWidth / 2));
-                imagestring($canvas, 4, $x, $y, $text, $color);
+        // Helper pemotong baris teks (word wrapping) berdasarkan batas lebar piksel
+        $wrapText = function(string $text, float $fontSize, string $fontFile, int $maxWidthPx) {
+            if (!file_exists($fontFile)) {
+                return explode("\n", wordwrap($text, 75, "\n"));
             }
+            $words = preg_split('/\s+/', trim($text));
+            $lines = [];
+            $currentLine = '';
+            foreach ($words as $word) {
+                $testLine = ($currentLine === '') ? $word : $currentLine . ' ' . $word;
+                $box = imagettfbbox($fontSize, 0, $fontFile, $testLine);
+                $testWidth = abs($box[2] - $box[0]);
+                if ($testWidth > $maxWidthPx && $currentLine !== '') {
+                    $lines[] = $currentLine;
+                    $currentLine = $word;
+                } else {
+                    $currentLine = $testLine;
+                }
+            }
+            if ($currentLine !== '') {
+                $lines[] = $currentLine;
+            }
+            return $lines;
         };
 
-        $printSigText($config['nama_kepala_lab'] ?? '', $fsSig, $xLeftCenter, $yTtdName, $colorBlack);
-        $printSigText("Kepala Laboratorium", $fsSig * 0.8, $xLeftCenter, $yTtdRole, $colorGray);
+        // Font Files
+        $fontJudul     = $getFontPath('judul', 'PlayfairDisplay-Bold');
+        $fontPreamble  = $getFontPath('preamble', 'OpenSans-Regular');
+        $fontNama      = $getFontPath('nama', 'PlayfairDisplay-Bold');
+        $fontNrp       = $getFontPath('nrp', 'Montserrat-Bold');
+        $fontDesc      = $getFontPath('deskripsi', 'OpenSans-Regular');
+        $fontNamaKiri  = $getFontPath('nama_kiri', 'Montserrat-Bold');
+        $fontRoleKiri  = $getFontPath('role_kiri', 'OpenSans-Regular');
+        $fontNamaKanan = $getFontPath('nama_kanan', 'Montserrat-Bold');
+        $fontRoleKanan = $getFontPath('role_kanan', 'OpenSans-Regular');
 
-        $printSigText($config['nama_ketua_prodi'] ?? '', $fsSig, $xRightCenter, $yTtdName, $colorBlack);
-        $printSigText("Ketua Prodi", $fsSig * 0.8, $xRightCenter, $yTtdRole, $colorGray);
+        // Font Sizes Dinamis
+        $fsJudul     = $getFontSize('judul', 65);  
+        $fsPreamble  = $getFontSize('preamble', 26);  
+        $fsNama      = $getFontSize('nama', 85); 
+        $fsNrp       = $getFontSize('nrp', 26);  
+        $fsDesc      = $getFontSize('deskripsi', 24);  
+        $fsNamaKiri  = $getFontSize('nama_kiri', 24);  
+        $fsRoleKiri  = $getFontSize('role_kiri', 19);  
+        $fsNamaKanan = $getFontSize('nama_kanan', 24);  
+        $fsRoleKanan = $getFontSize('role_kanan', 19);  
 
-        $renderTtd = function($ttdPath, $centerX, $yPos) use ($canvas, $scale) {
+        // Koordinat Elemen
+        list($xJudul, $yJudul)       = $getCoords('judul', 0.50, 0.22);
+        list($xPreamble, $yPreamble) = $getCoords('preamble', 0.50, 0.32);
+        list($xNama, $yNama)         = $getCoords('nama', 0.50, 0.42);
+        list($xLine, $yLine)         = $getCoords('garis', 0.50, 0.49);
+        list($xNrp, $yNrp)           = $getCoords('nrp', 0.50, 0.53);
+        list($xDesc, $yDesc)         = $getCoords('deskripsi', 0.50, 0.60);
+
+        list($xTtdKiri, $yTtdKiri)   = $getCoords('ttd_kiri', 0.30, 0.70);
+        list($xNamaKiri, $yNamaKiri) = $getCoords('nama_kiri', 0.30, 0.85);
+        list($xRoleKiri, $yRoleKiri) = $getCoords('role_kiri', 0.30, 0.885);
+
+        list($xTtdKanan, $yTtdKanan)   = $getCoords('ttd_kanan', 0.70, 0.70);
+        list($xNamaKanan, $yNamaKanan) = $getCoords('nama_kanan', 0.70, 0.85);
+        list($xRoleKanan, $yRoleKanan) = $getCoords('role_kanan', 0.70, 0.885);
+
+        // 1. Render Judul
+        $judul = strtoupper($config['judul'] ?? 'SERTIFIKAT APRESIASI');
+        $printCenteredText($judul, $fsJudul, $fontJudul, $xJudul, $yJudul, $colorBlack);
+
+        // 2. Render Preamble
+        $preamble = "Dengan bangga dipersembahkan kepada:";
+        $printCenteredText($preamble, $fsPreamble, $fontPreamble, $xPreamble, $yPreamble, $colorGray);
+
+        // 3. Render Nama
+        $printCenteredText($namaUser, $fsNama, $fontNama, $xNama, $yNama, $colorBlack);
+
+        // 4. Render Garis Pembatas (Dengan lebar dinamis persis visual editor)
+        $lineLimitPct = isset($layout['garis']['width_pct']) ? (float)$layout['garis']['width_pct'] : 45;
+        $lineWidthHalf = (int)($imgWidth * ($lineLimitPct / 2) / 100);
+        $lineStartX = $xLine - $lineWidthHalf;
+        $lineEndX = $xLine + $lineWidthHalf;
+        imagesetthickness($canvas, max(2, (int)(3 * $scale)));
+        imageline($canvas, $lineStartX, $yLine, $lineEndX, $yLine, $colorLine);
+
+        // 5. Render NRP
+        $printCenteredText($nrpUser, $fsNrp, $fontNrp, $xNrp, $yNrp, $colorBlack);
+
+        // 6. Render Deskripsi (Word wrapping presisi dengan lebar dinamis)
+        $deskripsi = $config['deskripsi_template'] ?? '';
+        $descWidthPct = isset($layout['deskripsi']['width_pct']) ? (float)$layout['deskripsi']['width_pct'] : 65;
+        $descMaxWidth = (int)($imgWidth * ($descWidthPct / 100));
+        $descLines = $wrapText($deskripsi, $fsDesc, $fontDesc, $descMaxWidth);
+        $lineHeightDesc = (int)($fsDesc * 1.45);
+        $currentYDesc = $yDesc;
+        
+        foreach ($descLines as $line) {
+            $printCenteredText(trim($line), $fsDesc, $fontDesc, $xDesc, $currentYDesc, $colorBlack);
+            $currentYDesc += $lineHeightDesc;
+        }
+
+        // 7. Render TTD dan Pejabat
+        $renderTtd = function($ttdPath, $centerX, $yPos, $targetHBase = 130) use ($canvas, $scale) {
             if (!empty($ttdPath) && file_exists(WRITEPATH . 'uploads/' . $ttdPath)) {
                 $ttdImg = imagecreatefrompng(WRITEPATH . 'uploads/' . $ttdPath);
                 if ($ttdImg) {
                     $ttdW = imagesx($ttdImg);
                     $ttdH = imagesy($ttdImg);
                     
-                    $targetH = (int)(150 * $scale);
+                    $targetH = (int)($targetHBase * $scale);
                     $targetW = (int)($ttdW * ($targetH / $ttdH));
                     
                     $ttdResized = imagecreatetruecolor($targetW, $targetH);
@@ -512,8 +681,17 @@ class SertifikatController extends BaseController
             }
         };
 
-        $renderTtd($config['ttd_kepala_lab'] ?? '', $xLeftCenter, $yTtdImg);
-        $renderTtd($config['ttd_ketua_prodi'] ?? '', $xRightCenter, $yTtdImg);
+        // Render TTD Kiri (Kepala Lab)
+        $hTtdKiri = isset($layout['ttd_kiri']['height']) ? (float)$layout['ttd_kiri']['height'] : 130;
+        $renderTtd($config['ttd_kepala_lab'] ?? '', $xTtdKiri, $yTtdKiri, $hTtdKiri);
+        $printCenteredText($config['nama_kepala_lab'] ?? '', $fsNamaKiri, $fontNamaKiri, $xNamaKiri, $yNamaKiri, $colorBlack);
+        $printCenteredText("Kepala Laboratorium", $fsRoleKiri, $fontRoleKiri, $xRoleKiri, $yRoleKiri, $colorGray);
+
+        // Render TTD Kanan (Ketua Prodi)
+        $hTtdKanan = isset($layout['ttd_kanan']['height']) ? (float)$layout['ttd_kanan']['height'] : 130;
+        $renderTtd($config['ttd_ketua_prodi'] ?? '', $xTtdKanan, $yTtdKanan, $hTtdKanan);
+        $printCenteredText($config['nama_ketua_prodi'] ?? '', $fsNamaKanan, $fontNamaKanan, $xNamaKanan, $yNamaKanan, $colorBlack);
+        $printCenteredText("Ketua Prodi", $fsRoleKanan, $fontRoleKanan, $xRoleKanan, $yRoleKanan, $colorGray);
 
         return $canvas;
     }

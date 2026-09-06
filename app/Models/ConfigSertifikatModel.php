@@ -17,6 +17,7 @@ class ConfigSertifikatModel extends Model
         'ttd_kepala_lab',
         'nama_ketua_prodi',
         'ttd_ketua_prodi',
+        'layout_config',
         'updated_at',
     ];
 

@@ -10,6 +10,7 @@ class UsersSeeder extends Seeder
     {
         $userData = [
             ['nomor' => '152022001', 'nama' => 'Jasman Pardede', 'no_telp' => '081234567890', 'jurusan' => 'Informatika', 'role_id' => 1], // Admin/Kepala Lab
+            ['nomor' => '152022101', 'nama' => 'Admin Test', 'no_telp' => '081234567895', 'jurusan' => 'Informatika', 'role_id' => 1], // Admin Baru
             ['nomor' => '152022002', 'nama' => 'Prof. Siti Nurhaliza, Ph.D', 'no_telp' => '081234567891', 'jurusan' => 'Informatika', 'role_id' => 3],
             ['nomor' => '152022003', 'nama' => 'Dr. Budi Santoso, M.T', 'no_telp' => '081234567892', 'jurusan' => 'Informatika', 'role_id' => 3],
             ['nomor' => '152022004', 'nama' => 'Dr. Rina Sari, M.Kom', 'no_telp' => '081234567893', 'jurusan' => 'Informatika', 'role_id' => 3],

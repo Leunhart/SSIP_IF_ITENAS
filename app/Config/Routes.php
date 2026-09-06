@@ -162,6 +162,7 @@ $routes->group('', ['filter' => ['session_security', 'permission:sertifikat_admi
         $routes->get('preview', 'SertifikatController::preview');
         $routes->get('raw-template', 'SertifikatController::rawTemplate');
         $routes->get('raw-ttd/(:segment)', 'SertifikatController::rawTtd/$1');
+        $routes->get('raw-logo', 'SertifikatController::rawLogo');
         $routes->post('save-layout', 'SertifikatController::saveLayout');
         $routes->post('config', 'SertifikatController::updateConfig');
         $routes->post('delete-config', 'SertifikatController::deleteConfig');

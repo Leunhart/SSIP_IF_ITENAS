@@ -78,6 +78,17 @@ class SertifikatController extends BaseController
             $data['ttd_ketua_prodi'] = 'sertifikat/' . $newName;
         }
 
+        // Proses Logo Tambahan
+        $logoTambahan = $this->request->getFile('logo_tambahan');
+        if ($logoTambahan && $logoTambahan->isValid() && ! $logoTambahan->hasMoved()) {
+            if (! in_array($logoTambahan->getMimeType(), ['image/jpeg', 'image/png'])) {
+                return redirect()->back()->with('error', 'File Logo Tambahan harus berformat PNG atau JPG.');
+            }
+            $newName = 'logo_' . time() . '.' . $logoTambahan->getExtension();
+            $logoTambahan->move(self::UPLOAD_PATH, $newName);
+            $data['logo_tambahan'] = 'sertifikat/' . $newName;
+        }
+
         $existing = $this->configModel->getConfig();
         if ($existing) {
             $this->configModel->update($existing['id'], $data);
@@ -96,7 +107,8 @@ class SertifikatController extends BaseController
             $filesToDelete = [
                 $existing['template_gambar'],
                 $existing['ttd_kepala_lab'],
-                $existing['ttd_ketua_prodi']
+                $existing['ttd_ketua_prodi'],
+                $existing['logo_tambahan'] ?? null
             ];
 
             foreach ($filesToDelete as $file) {
@@ -224,6 +236,27 @@ class SertifikatController extends BaseController
 
         return $this->response
             ->setHeader('Content-Type', 'image/png')
+            ->setBody(file_get_contents($path));
+    }
+
+    /**
+     * Endpoint untuk menyajikan gambar logo tambahan mentah (PNG/JPG)
+     */
+    public function rawLogo()
+    {
+        $config = $this->configModel->getConfig();
+        if (!$config || empty($config['logo_tambahan'])) {
+            return $this->response->setStatusCode(404, 'Logo not set');
+        }
+
+        $path = WRITEPATH . 'uploads/' . $config['logo_tambahan'];
+        if (!file_exists($path)) {
+            return $this->response->setStatusCode(404, 'File not found');
+        }
+
+        $mime = mime_content_type($path) ?: 'image/png';
+        return $this->response
+            ->setHeader('Content-Type', $mime)
             ->setBody(file_get_contents($path));
     }
 
@@ -660,43 +693,59 @@ class SertifikatController extends BaseController
             $currentYDesc += $lineHeightDesc;
         }
 
-        // 7. Render TTD dan Pejabat
-        $renderTtd = function($ttdPath, $centerX, $yPos, $targetHBase = 130) use ($canvas, $scale) {
-            if (!empty($ttdPath) && file_exists(WRITEPATH . 'uploads/' . $ttdPath)) {
-                $ttdImg = imagecreatefrompng(WRITEPATH . 'uploads/' . $ttdPath);
-                if ($ttdImg) {
-                    $ttdW = imagesx($ttdImg);
-                    $ttdH = imagesy($ttdImg);
+        // 7. Render Gambar Universal (TTD & Logo dengan Alpha Transparency)
+        $renderImage = function($imgPath, $centerX, $yPos, $targetHBase = 130) use ($canvas, $scale) {
+            if (!empty($imgPath) && file_exists(WRITEPATH . 'uploads/' . $imgPath)) {
+                $fullPath = WRITEPATH . 'uploads/' . $imgPath;
+                $imgInfo = @getimagesize($fullPath);
+                if (!$imgInfo) return;
+
+                $srcImg = match ($imgInfo['mime']) {
+                    'image/jpeg' => @imagecreatefromjpeg($fullPath),
+                    'image/png'  => @imagecreatefrompng($fullPath),
+                    default      => false,
+                };
+
+                if ($srcImg) {
+                    $srcW = imagesx($srcImg);
+                    $srcH = imagesy($srcImg);
                     
                     $targetH = (int)($targetHBase * $scale);
-                    $targetW = (int)($ttdW * ($targetH / $ttdH));
+                    $targetW = (int)($srcW * ($targetH / $srcH));
                     
-                    $ttdResized = imagecreatetruecolor($targetW, $targetH);
-                    imagealphablending($ttdResized, false);
-                    imagesavealpha($ttdResized, true);
-                    $transparent = imagecolorallocatealpha($ttdResized, 0, 0, 0, 127);
-                    imagefilledrectangle($ttdResized, 0, 0, $targetW, $targetH, $transparent);
+                    $resized = imagecreatetruecolor($targetW, $targetH);
+                    imagealphablending($resized, false);
+                    imagesavealpha($resized, true);
+                    $transparent = imagecolorallocatealpha($resized, 0, 0, 0, 127);
+                    imagefilledrectangle($resized, 0, 0, $targetW, $targetH, $transparent);
                     
-                    imagecopyresampled($ttdResized, $ttdImg, 0, 0, 0, 0, $targetW, $targetH, $ttdW, $ttdH);
+                    imagecopyresampled($resized, $srcImg, 0, 0, 0, 0, $targetW, $targetH, $srcW, $srcH);
                     
                     $x = (int)($centerX - ($targetW / 2));
-                    imagecopy($canvas, $ttdResized, $x, $yPos, 0, 0, $targetW, $targetH);
+                    imagecopy($canvas, $resized, $x, $yPos, 0, 0, $targetW, $targetH);
                     
-                    imagedestroy($ttdResized);
-                    imagedestroy($ttdImg);
+                    imagedestroy($resized);
+                    imagedestroy($srcImg);
                 }
             }
         };
 
+        // Render Logo Tambahan (Jika Ada)
+        if (!empty($config['logo_tambahan'])) {
+            list($xLogo, $yLogo) = $getCoords('logo', 0.15, 0.12);
+            $hLogo = isset($layout['logo']['height']) ? (float)$layout['logo']['height'] : 120;
+            $renderImage($config['logo_tambahan'], $xLogo, $yLogo, $hLogo);
+        }
+
         // Render TTD Kiri (Kepala Lab)
         $hTtdKiri = isset($layout['ttd_kiri']['height']) ? (float)$layout['ttd_kiri']['height'] : 130;
-        $renderTtd($config['ttd_kepala_lab'] ?? '', $xTtdKiri, $yTtdKiri, $hTtdKiri);
+        $renderImage($config['ttd_kepala_lab'] ?? '', $xTtdKiri, $yTtdKiri, $hTtdKiri);
         $printCenteredText($config['nama_kepala_lab'] ?? '', $fsNamaKiri, $fontNamaKiri, $xNamaKiri, $yNamaKiri, $colorBlack);
         $printCenteredText("Kepala Laboratorium", $fsRoleKiri, $fontRoleKiri, $xRoleKiri, $yRoleKiri, $colorGray);
 
         // Render TTD Kanan (Ketua Prodi)
         $hTtdKanan = isset($layout['ttd_kanan']['height']) ? (float)$layout['ttd_kanan']['height'] : 130;
-        $renderTtd($config['ttd_ketua_prodi'] ?? '', $xTtdKanan, $yTtdKanan, $hTtdKanan);
+        $renderImage($config['ttd_ketua_prodi'] ?? '', $xTtdKanan, $yTtdKanan, $hTtdKanan);
         $printCenteredText($config['nama_ketua_prodi'] ?? '', $fsNamaKanan, $fontNamaKanan, $xNamaKanan, $yNamaKanan, $colorBlack);
         $printCenteredText("Ketua Prodi", $fsRoleKanan, $fontRoleKanan, $xRoleKanan, $yRoleKanan, $colorGray);
 

@@ -107,6 +107,16 @@
                                 </div>
                             </div>
 
+                            <div class="mb-3 bg-light p-3 rounded border">
+                                <label class="form-label fw-semibold">Logo Tambahan / Instansi (PNG Transparan / JPG)</label>
+                                <input type="file" name="logo_tambahan" class="form-control" accept="image/png, image/jpeg">
+                                <?php if(!empty($config['logo_tambahan'])): ?>
+                                    <div class="mt-2 text-success small"><i class="fas fa-check-circle"></i> Logo tambahan terpasang.</div>
+                                <?php else: ?>
+                                    <div class="mt-2 text-muted small"><i class="fas fa-info-circle"></i> Opsional: Dapat diatur posisi dan ukurannya di Visual Editor.</div>
+                                <?php endif; ?>
+                            </div>
+
                             <!-- Area Tombol Aksi -->
                             <div class="mt-4 d-flex justify-content-end gap-2">
                                 <?php if(!empty($config)): ?>
@@ -258,6 +268,17 @@
                         <div id="drag-role_kanan" class="draggable-element" data-element="role_kanan">
                             <div class="element-label">Jabatan Kanan</div>
                             <div class="element-content font-sig-role text-center">Ketua Prodi</div>
+                        </div>
+
+                        <div id="drag-logo" class="draggable-element draggable-image" data-element="logo">
+                            <div class="element-label">Logo Tambahan</div>
+                            <div class="element-content text-center">
+                                <?php if(!empty($config['logo_tambahan'])): ?>
+                                    <img src="<?= site_url('sertifikat/raw-logo') ?>" style="height: 60px; pointer-events: none;" alt="Logo Tambahan">
+                                <?php else: ?>
+                                    <div class="ttd-placeholder">Logo Tambahan</div>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -523,6 +544,7 @@ const defaultLayout = {
     garis: { x_pct: 50, y_pct: 49, width_pct: 45 },
     nrp: { x_pct: 50, y_pct: 53, font_size: 26, font_family: 'Montserrat-Bold' },
     deskripsi: { x_pct: 50, y_pct: 60, font_size: 24, font_family: 'OpenSans-Regular', width_pct: 65 },
+    logo: { x_pct: 15, y_pct: 12, height: 120 },
     ttd_kiri: { x_pct: 30, y_pct: 70, height: 130 },
     nama_kiri: { x_pct: 30, y_pct: 85, font_size: 24, font_family: 'Montserrat-Bold' },
     role_kiri: { x_pct: 30, y_pct: 88.5, font_size: 19, font_family: 'OpenSans-Regular' },
@@ -635,8 +657,8 @@ function updateElementsOnCanvas() {
             content.style.fontStyle = (ff.includes('Italic') || ff.includes('GreatVibes')) ? 'italic' : 'normal';
         }
 
-        // Terapkan ukuran Gambar ke TTD
-        if (key.startsWith('ttd_') && currentLayout[key].height) {
+        // Terapkan ukuran Gambar ke TTD / Logo
+        if ((key.startsWith('ttd_') || key === 'logo') && currentLayout[key].height) {
             const img = el.querySelector('img');
             if (img) {
                 const hCqw = (currentLayout[key].height / 20);
@@ -787,9 +809,9 @@ function selectElement(el) {
         const wPct = currentLayout[key].width_pct || 45;
         document.getElementById('inspector-linewidth').value = wPct;
         document.getElementById('inspector-linewidth-badge').innerText = wPct + '%';
-    } else if (key.startsWith('ttd_')) {
+    } else if (key.startsWith('ttd_') || key === 'logo') {
         imgHeightContainer.classList.remove('d-none');
-        const imgH = currentLayout[key].height || 130;
+        const imgH = currentLayout[key].height || 120;
         document.getElementById('inspector-imgheight').value = imgH;
         document.getElementById('inspector-imgheight-badge').innerText = imgH + 'px';
     } else {
@@ -822,6 +844,7 @@ function deselectElement() {
 
 function getElementReadableName(key) {
     const names = {
+        logo: "Logo Tambahan / Mitra",
         judul: "Judul Sertifikat",
         preamble: "Teks Pengantar (Preamble)",
         nama: "Nama Asisten",
@@ -895,8 +918,8 @@ function updateSelectedSize() {
         if (line) {
             line.style.width = wPct + 'cqw';
         }
-    } else if (selectedElementId.startsWith('ttd_')) {
-        const imgH = parseInt(document.getElementById('inspector-imgheight').value) || 130;
+    } else if (selectedElementId.startsWith('ttd_') || selectedElementId === 'logo') {
+        const imgH = parseInt(document.getElementById('inspector-imgheight').value) || 120;
         currentLayout[selectedElementId].height = imgH;
         document.getElementById('inspector-imgheight-badge').innerText = imgH + 'px';
         

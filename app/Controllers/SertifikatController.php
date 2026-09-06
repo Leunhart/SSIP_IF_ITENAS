@@ -78,15 +78,20 @@ class SertifikatController extends BaseController
             $data['ttd_ketua_prodi'] = 'sertifikat/' . $newName;
         }
 
-        // Proses Logo Tambahan
-        $logoTambahan = $this->request->getFile('logo_tambahan');
-        if ($logoTambahan && $logoTambahan->isValid() && ! $logoTambahan->hasMoved()) {
-            if (! in_array($logoTambahan->getMimeType(), ['image/jpeg', 'image/png'])) {
-                return redirect()->back()->with('error', 'File Logo Tambahan harus berformat PNG atau JPG.');
+        // Proses Logo 1, 2, 3
+        foreach ([1, 2, 3] as $i) {
+            $logoFile = $this->request->getFile('logo_' . $i);
+            if ($logoFile && $logoFile->isValid() && ! $logoFile->hasMoved()) {
+                if (! in_array($logoFile->getMimeType(), ['image/jpeg', 'image/png'])) {
+                    return redirect()->back()->with('error', "File Logo $i harus berformat PNG atau JPG.");
+                }
+                $newName = 'logo_' . $i . '_' . time() . '.' . $logoFile->getExtension();
+                $logoFile->move(self::UPLOAD_PATH, $newName);
+                $data['logo_' . $i] = 'sertifikat/' . $newName;
+                if ($i === 1) {
+                    $data['logo_tambahan'] = 'sertifikat/' . $newName;
+                }
             }
-            $newName = 'logo_' . time() . '.' . $logoTambahan->getExtension();
-            $logoTambahan->move(self::UPLOAD_PATH, $newName);
-            $data['logo_tambahan'] = 'sertifikat/' . $newName;
         }
 
         $existing = $this->configModel->getConfig();
@@ -108,7 +113,10 @@ class SertifikatController extends BaseController
                 $existing['template_gambar'],
                 $existing['ttd_kepala_lab'],
                 $existing['ttd_ketua_prodi'],
-                $existing['logo_tambahan'] ?? null
+                $existing['logo_tambahan'] ?? null,
+                $existing['logo_1'] ?? null,
+                $existing['logo_2'] ?? null,
+                $existing['logo_3'] ?? null,
             ];
 
             foreach ($filesToDelete as $file) {
@@ -242,14 +250,24 @@ class SertifikatController extends BaseController
     /**
      * Endpoint untuk menyajikan gambar logo tambahan mentah (PNG/JPG)
      */
-    public function rawLogo()
+    public function rawLogo(string $index = '1')
     {
         $config = $this->configModel->getConfig();
-        if (!$config || empty($config['logo_tambahan'])) {
-            return $this->response->setStatusCode(404, 'Logo not set');
+        if (!$config) {
+            return $this->response->setStatusCode(404, 'Config not found');
         }
 
-        $path = WRITEPATH . 'uploads/' . $config['logo_tambahan'];
+        $field = 'logo_' . $index;
+        $file = $config[$field] ?? null;
+        if (empty($file) && ($index === '1' || $index === 'logo')) {
+            $file = $config['logo_tambahan'] ?? ($config['logo_1'] ?? null);
+        }
+
+        if (empty($file)) {
+            return $this->response->setStatusCode(404, "Logo $index not set");
+        }
+
+        $path = WRITEPATH . 'uploads/' . $file;
         if (!file_exists($path)) {
             return $this->response->setStatusCode(404, 'File not found');
         }
@@ -730,11 +748,21 @@ class SertifikatController extends BaseController
             }
         };
 
-        // Render Logo Tambahan (Jika Ada)
-        if (!empty($config['logo_tambahan'])) {
-            list($xLogo, $yLogo) = $getCoords('logo', 0.15, 0.12);
-            $hLogo = isset($layout['logo']['height']) ? (float)$layout['logo']['height'] : 120;
-            $renderImage($config['logo_tambahan'], $xLogo, $yLogo, $hLogo);
+        // Render Logo 1, 2, 3 (Jika Ada)
+        $logoDefaults = [
+            1 => ['x' => 0.12, 'y' => 0.10],
+            2 => ['x' => 0.50, 'y' => 0.10],
+            3 => ['x' => 0.88, 'y' => 0.10],
+        ];
+
+        foreach ([1, 2, 3] as $i) {
+            $logoFile = $config['logo_' . $i] ?? ($i === 1 ? ($config['logo_tambahan'] ?? null) : null);
+            if (!empty($logoFile)) {
+                $key = 'logo_' . $i;
+                list($xLogo, $yLogo) = $getCoords($key, $logoDefaults[$i]['x'], $logoDefaults[$i]['y']);
+                $hLogo = isset($layout[$key]['height']) ? (float)$layout[$key]['height'] : (isset($layout['logo']['height']) && $i === 1 ? (float)$layout['logo']['height'] : 110);
+                $renderImage($logoFile, $xLogo, $yLogo, $hLogo);
+            }
         }
 
         // Render TTD Kiri (Kepala Lab)

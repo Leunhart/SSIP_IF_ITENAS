@@ -18,6 +18,9 @@ class ConfigSertifikatModel extends Model
         'nama_ketua_prodi',
         'ttd_ketua_prodi',
         'logo_tambahan',
+        'logo_1',
+        'logo_2',
+        'logo_3',
         'layout_config',
         'updated_at',
     ];

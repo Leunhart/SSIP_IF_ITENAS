@@ -163,6 +163,7 @@ $routes->group('', ['filter' => ['session_security', 'permission:sertifikat_admi
         $routes->get('raw-template', 'SertifikatController::rawTemplate');
         $routes->get('raw-ttd/(:segment)', 'SertifikatController::rawTtd/$1');
         $routes->get('raw-logo', 'SertifikatController::rawLogo');
+        $routes->get('raw-logo/(:segment)', 'SertifikatController::rawLogo/$1');
         $routes->post('save-layout', 'SertifikatController::saveLayout');
         $routes->post('config', 'SertifikatController::updateConfig');
         $routes->post('delete-config', 'SertifikatController::deleteConfig');

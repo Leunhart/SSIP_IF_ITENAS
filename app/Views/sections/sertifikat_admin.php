@@ -933,6 +933,15 @@ function resetToDefault() {
     }
 }
 
+function getCsrfTokenValue() {
+    const cookieName = '<?= config('Security')->cookieName ?? 'csrf_cookie' ?>';
+    const match = document.cookie.match(new RegExp('(^|;\\s*)' + cookieName + '=([^;]+)'));
+    if (match && match[2]) return decodeURIComponent(match[2]);
+    const input = document.querySelector('input[name="<?= csrf_token() ?>"]');
+    if (input && input.value) return input.value;
+    return '<?= csrf_hash() ?>';
+}
+
 function saveLayoutCoords() {
     const saveBtn = document.querySelector('button[onclick="saveLayoutCoords()"]');
     const originalText = saveBtn.innerHTML;
@@ -940,17 +949,32 @@ function saveLayoutCoords() {
     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Menyimpan...';
 
     const url = '<?= site_url('sertifikat/save-layout') ?>';
+    const csrfToken = getCsrfTokenValue();
+    const csrfHeader = '<?= csrf_header() ?>';
+    
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    };
+    if (csrfHeader && csrfToken) {
+        headers[csrfHeader] = csrfToken;
+    }
     
     fetch(url, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
-        },
+        headers: headers,
         body: JSON.stringify(currentLayout)
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(errData => {
+                throw new Error(errData.message || 'HTTP Error ' + response.status);
+            }).catch(() => {
+                throw new Error('HTTP Error ' + response.status);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
             alert(data.message || 'Tata letak berhasil disimpan.');
@@ -964,7 +988,7 @@ function saveLayoutCoords() {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Terjadi kesalahan jaringan saat menyimpan tata letak.');
+        alert('Gagal menyimpan tata letak: ' + error.message);
     })
     .finally(() => {
         saveBtn.disabled = false;

@@ -112,12 +112,13 @@ class Filters extends BaseFilters
      * @var array<string, array<string, list<string>>>
      */
     public array $filters = [
-        // [T1.1] Kecualikan endpoint API dari CSRF karena menggunakan JWT di Authorization header.
-        // Endpoint API diproteksi oleh AdminFilter/RoleFilter yang memvalidasi JWT.
+        // [T1.1] Kecualikan endpoint API & AJAX Admin berotentikasi dari CSRF
+        // Endpoint API diproteksi oleh JWT / RoleFilter, save-layout diproteksi oleh session_security & permission filter.
         'csrf' => [
             'except' => [
                 'api/*',
                 'api/auth/*',
+                'sertifikat/save-layout',
             ],
         ],
     ];

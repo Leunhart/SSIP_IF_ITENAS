@@ -486,17 +486,26 @@ class SertifikatController extends BaseController
         $imgWidth  = imagesx($canvas);
         $imgHeight = imagesy($canvas);
         
-        // Font dictionary mapping
-        $fontMap = [
-            'OpenSans-Bold'        => FCPATH . 'assets/fonts/OpenSans-Bold.ttf',
-            'OpenSans-Regular'     => FCPATH . 'assets/fonts/OpenSans-Regular.ttf',
-            'Montserrat-Bold'      => FCPATH . 'assets/fonts/Montserrat-Bold.ttf',
-            'PlayfairDisplay-Bold' => FCPATH . 'assets/fonts/PlayfairDisplay-Bold.ttf',
-            'Cinzel-Bold'          => FCPATH . 'assets/fonts/Cinzel-Bold.ttf',
-            'GreatVibes-Regular'   => FCPATH . 'assets/fonts/GreatVibes-Regular.ttf',
-            'Poppins-Bold'         => FCPATH . 'assets/fonts/Poppins-Bold.ttf',
-            'Poppins-Regular'      => FCPATH . 'assets/fonts/Poppins-Regular.ttf',
-        ];
+        // Robust Font File Resolver
+        $locateFontFile = function(string $fontName) {
+            $cleanName = str_replace('.ttf', '', $fontName);
+            $candidates = [
+                FCPATH . 'assets/fonts/' . $cleanName . '.ttf',
+                ROOTPATH . 'public/assets/fonts/' . $cleanName . '.ttf',
+                __DIR__ . '/../../public/assets/fonts/' . $cleanName . '.ttf',
+                realpath(__DIR__ . '/../../public/assets/fonts') . '/' . $cleanName . '.ttf',
+            ];
+            foreach ($candidates as $path) {
+                if ($path && file_exists($path)) return $path;
+            }
+            // Fallback jika font spesifik belum ada
+            foreach ($candidates as $path) {
+                if (!$path) continue;
+                $fallback = dirname($path) . '/OpenSans-Bold.ttf';
+                if (file_exists($fallback)) return $fallback;
+            }
+            return null;
+        };
 
         // Decode layout_config dari database
         $layout = [];
@@ -505,15 +514,13 @@ class SertifikatController extends BaseController
         }
 
         // Helper untuk mendapatkan path font yang valid
-        $getFontPath = function(string $key, string $defaultFontKey = 'OpenSans-Bold') use ($layout, $fontMap) {
+        $getFontPath = function(string $key, string $defaultFontKey = 'OpenSans-Bold') use ($layout, $locateFontFile) {
             $fontKey = $layout[$key]['font_family'] ?? $defaultFontKey;
-            if (isset($fontMap[$fontKey]) && file_exists($fontMap[$fontKey])) {
-                return $fontMap[$fontKey];
-            }
-            if (isset($fontMap[$defaultFontKey]) && file_exists($fontMap[$defaultFontKey])) {
-                return $fontMap[$defaultFontKey];
-            }
-            return FCPATH . 'assets/fonts/OpenSans-Bold.ttf';
+            $found = $locateFontFile($fontKey);
+            if ($found) return $found;
+            $foundDefault = $locateFontFile($defaultFontKey);
+            if ($foundDefault) return $foundDefault;
+            return $locateFontFile('OpenSans-Bold');
         };
         
         $colorBlack = imagecolorallocate($canvas, 30, 30, 30);

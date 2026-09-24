@@ -447,7 +447,7 @@ class SertifikatController extends BaseController
         $namaFile = 'Sertifikat_' . preg_replace('/\s+/', '_', $namaUser) . '_' . $nrpUser . '.jpg';
 
         ob_start();
-        imagejpeg($canvas, null, 95); 
+        imagejpeg($canvas, null, 98); 
         $imageData = ob_get_clean();
         imagedestroy($canvas);
 
@@ -503,7 +503,7 @@ class SertifikatController extends BaseController
         }
 
         ob_start();
-        imagejpeg($canvas, null, 85); 
+        imagejpeg($canvas, null, 92); 
         $imageData = ob_get_clean();
         imagedestroy($canvas);
 
@@ -526,13 +526,36 @@ class SertifikatController extends BaseController
         if ($imgInfo === false) return false;
         
         $mime = $imgInfo['mime'];
-        $canvas = match ($mime) {
+        $rawCanvas = match ($mime) {
             'image/jpeg' => imagecreatefromjpeg($templatePath),
             'image/png'  => imagecreatefrompng($templatePath),
             default      => false,
         };
 
-        if (! $canvas) return false;
+        if (! $rawCanvas) return false;
+
+        $origWidth  = imagesx($rawCanvas);
+        $origHeight = imagesy($rawCanvas);
+
+        // Standar resolusi tinggi minimum untuk sertifikat tajam (minimal 2400px)
+        $targetWidth = max(2400, $origWidth);
+
+        if ($targetWidth > $origWidth) {
+            $targetHeight = (int) round(($origHeight / $origWidth) * $targetWidth);
+            $canvas = imagecreatetruecolor($targetWidth, $targetHeight);
+
+            // Beri background putih untuk mencegah warna hitam jika ada transparansi saat export JPEG
+            $white = imagecolorallocate($canvas, 255, 255, 255);
+            imagefilledrectangle($canvas, 0, 0, $targetWidth, $targetHeight, $white);
+
+            imagealphablending($canvas, true);
+            imagesavealpha($canvas, true);
+
+            imagecopyresampled($canvas, $rawCanvas, 0, 0, 0, 0, $targetWidth, $targetHeight, $origWidth, $origHeight);
+            imagedestroy($rawCanvas);
+        } else {
+            $canvas = $rawCanvas;
+        }
 
         $imgWidth  = imagesx($canvas);
         $imgHeight = imagesy($canvas);
@@ -563,6 +586,11 @@ class SertifikatController extends BaseController
         if (!empty($config['layout_config'])) {
             $layout = json_decode($config['layout_config'], true) ?: [];
         }
+        // Backward compat: migrasi key 'logo' lama ke 'logo_1'
+        if (isset($layout['logo']) && !isset($layout['logo_1'])) {
+            $layout['logo_1'] = $layout['logo'];
+        }
+        unset($layout['logo']);
 
         // Helper untuk mendapatkan path font yang valid
         $getFontPath = function(string $key, string $defaultFontKey = 'OpenSans-Bold') use ($layout, $locateFontFile) {

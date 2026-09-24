@@ -79,6 +79,9 @@
                             <div class="mb-3 bg-light p-3 rounded border">
                                 <label class="form-label fw-semibold">Template Background (Gambar Polos Lanskap)</label>
                                 <input type="file" name="template_gambar" class="form-control" accept="image/jpeg, image/png">
+                                <div class="form-text text-muted small mt-2">
+                                    <i class="fas fa-info-circle text-primary me-1"></i> <strong>Rekomendasi Template:</strong> Gunakan gambar background <strong>polos (hanya bingkai / ornamen grafis tanpa tulisan isi)</strong> beresolusi tinggi (minimal <strong>2000 × 1414 px</strong> atau A4 <strong>3508 × 2480 px</strong>) agar hasil cetak dan unduh mahasiswa tajam sempurna.
+                                </div>
                                 <?php if(!empty($config['template_gambar'])): ?>
                                     <div class="mt-2 text-success small"><i class="fas fa-check-circle"></i> Template background saat ini sudah terpasang.</div>
                                 <?php else: ?>
@@ -92,7 +95,10 @@
                                         <label class="form-label fw-semibold">Tanda Tangan Kepala Lab (PNG Transparan)</label>
                                         <input type="file" name="ttd_kepala_lab" class="form-control" accept="image/png">
                                         <?php if(!empty($config['ttd_kepala_lab'])): ?>
-                                            <div class="mt-2 text-success small"><i class="fas fa-check-circle"></i> TTD Kepala Lab terpasang.</div>
+                                            <div class="mt-2 d-flex align-items-center gap-2">
+                                                <span class="text-success small"><i class="fas fa-check-circle"></i> TTD Kepala Lab terpasang.</span>
+                                                <img src="<?= site_url('sertifikat/raw-ttd/kepala') ?>" style="height:40px;" alt="TTD Preview" class="border rounded">
+                                            </div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -101,20 +107,33 @@
                                         <label class="form-label fw-semibold">Tanda Tangan Ketua Prodi (PNG Transparan)</label>
                                         <input type="file" name="ttd_ketua_prodi" class="form-control" accept="image/png">
                                         <?php if(!empty($config['ttd_ketua_prodi'])): ?>
-                                            <div class="mt-2 text-success small"><i class="fas fa-check-circle"></i> TTD Ketua Prodi terpasang.</div>
+                                            <div class="mt-2 d-flex align-items-center gap-2">
+                                                <span class="text-success small"><i class="fas fa-check-circle"></i> TTD Ketua Prodi terpasang.</span>
+                                                <img src="<?= site_url('sertifikat/raw-ttd/prodi') ?>" style="height:40px;" alt="TTD Preview" class="border rounded">
+                                            </div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="mb-3 bg-light p-3 rounded border">
-                                <label class="form-label fw-semibold">Logo Tambahan / Instansi (PNG Transparan / JPG)</label>
-                                <input type="file" name="logo_tambahan" class="form-control" accept="image/png, image/jpeg">
-                                <?php if(!empty($config['logo_tambahan'])): ?>
-                                    <div class="mt-2 text-success small"><i class="fas fa-check-circle"></i> Logo tambahan terpasang.</div>
-                                <?php else: ?>
-                                    <div class="mt-2 text-muted small"><i class="fas fa-info-circle"></i> Opsional: Dapat diatur posisi dan ukurannya di Visual Editor.</div>
-                                <?php endif; ?>
+                            <h6 class="fw-bold text-secondary mb-3 border-bottom pb-2">Logo <span class="text-muted fw-normal fs-6">(Maks. 3 Logo — Opsional, atur posisi di Visual Editor)</span></h6>
+                            <div class="row">
+                                <?php foreach ([1, 2, 3] as $li): ?>
+                                <div class="col-md-4 mb-3">
+                                    <div class="bg-light p-3 rounded border h-100">
+                                        <label class="form-label fw-semibold small">Logo <?= $li ?></label>
+                                        <input type="file" name="logo_<?= $li ?>" class="form-control form-control-sm" accept="image/png, image/jpeg">
+                                        <?php $lf = $config['logo_' . $li] ?? ($li === 1 ? ($config['logo_tambahan'] ?? null) : null); ?>
+                                        <?php if(!empty($lf)): ?>
+                                            <div class="mt-2 text-center">
+                                                <img src="<?= site_url('sertifikat/raw-logo/' . $li) ?>" style="max-height:50px; max-width:100%;" alt="Logo <?= $li ?>" class="border rounded">
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="mt-2 text-muted small text-center"><i class="fas fa-image opacity-25 fa-2x d-block mb-1"></i>Kosong</div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
                             </div>
 
                             <!-- Area Tombol Aksi -->
@@ -232,7 +251,7 @@
                             <div class="element-label">TTD Kiri</div>
                             <div class="element-content text-center">
                                 <?php if(!empty($config['ttd_kepala_lab'])): ?>
-                                    <img src="<?= site_url('sertifikat/raw-ttd/kepala') ?>" style="height: 60px; pointer-events: none;" alt="TTD Kiri">
+                                    <img src="<?= site_url('sertifikat/raw-ttd/kepala') ?>" id="img-ttd_kiri" style="height: 6.5cqw; pointer-events: none; display:block;" alt="TTD Kiri">
                                 <?php else: ?>
                                     <div class="ttd-placeholder">Belum Ada TTD</div>
                                 <?php endif; ?>
@@ -253,7 +272,7 @@
                             <div class="element-label">TTD Kanan</div>
                             <div class="element-content text-center">
                                 <?php if(!empty($config['ttd_ketua_prodi'])): ?>
-                                    <img src="<?= site_url('sertifikat/raw-ttd/prodi') ?>" style="height: 60px; pointer-events: none;" alt="TTD Kanan">
+                                    <img src="<?= site_url('sertifikat/raw-ttd/prodi') ?>" id="img-ttd_kanan" style="height: 6.5cqw; pointer-events: none; display:block;" alt="TTD Kanan">
                                 <?php else: ?>
                                     <div class="ttd-placeholder">Belum Ada TTD</div>
                                 <?php endif; ?>
@@ -270,16 +289,26 @@
                             <div class="element-content font-sig-role text-center">Ketua Prodi</div>
                         </div>
 
-                        <div id="drag-logo" class="draggable-element draggable-image" data-element="logo">
-                            <div class="element-label">Logo Tambahan</div>
+                        <?php 
+                        $logoSrcs = [
+                            1 => $config['logo_1'] ?? ($config['logo_tambahan'] ?? null),
+                            2 => $config['logo_2'] ?? null,
+                            3 => $config['logo_3'] ?? null,
+                        ];
+                        foreach ([1, 2, 3] as $li):
+                            $logoKey = 'logo_' . $li;
+                        ?>
+                        <div id="drag-<?= $logoKey ?>" class="draggable-element draggable-image" data-element="<?= $logoKey ?>">
+                            <div class="element-label">Logo <?= $li ?></div>
                             <div class="element-content text-center">
-                                <?php if(!empty($config['logo_tambahan'])): ?>
-                                    <img src="<?= site_url('sertifikat/raw-logo') ?>" style="height: 60px; pointer-events: none;" alt="Logo Tambahan">
+                                <?php if(!empty($logoSrcs[$li])): ?>
+                                    <img src="<?= site_url('sertifikat/raw-logo/' . $li) ?>" style="height: 6cqw; pointer-events: none; display:block;" alt="Logo <?= $li ?>">
                                 <?php else: ?>
-                                    <div class="ttd-placeholder">Logo Tambahan</div>
+                                    <div class="ttd-placeholder" style="opacity:0.4;">Logo <?= $li ?></div>
                                 <?php endif; ?>
                             </div>
                         </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
 
@@ -381,6 +410,11 @@
                     <div id="inspector-empty" class="text-center text-muted my-auto py-5">
                         <i class="fas fa-mouse-pointer fa-2x mb-3 text-secondary bg-light p-3 rounded-circle shadow-sm"></i>
                         <p class="mb-0 small">Belum ada elemen yang dipilih.<br>Klik atau geser salah satu elemen di kanvas untuk mulai mengedit.</p>
+                    </div>
+
+                    <!-- Toast Notifikasi Inline -->
+                    <div id="editor-toast" class="d-none alert alert-success alert-dismissible py-2 px-3 small mb-0" role="alert" style="border-radius:8px;">
+                        <i class="fas fa-check-circle me-1"></i> <span id="editor-toast-msg">Tata letak berhasil disimpan.</span>
                     </div>
 
                     <div class="mt-auto border-top pt-3">
@@ -544,7 +578,9 @@ const defaultLayout = {
     garis: { x_pct: 50, y_pct: 49, width_pct: 45 },
     nrp: { x_pct: 50, y_pct: 53, font_size: 26, font_family: 'Montserrat-Bold' },
     deskripsi: { x_pct: 50, y_pct: 60, font_size: 24, font_family: 'OpenSans-Regular', width_pct: 65 },
-    logo: { x_pct: 15, y_pct: 12, height: 120 },
+    logo_1: { x_pct: 12, y_pct: 10, height: 110 },
+    logo_2: { x_pct: 50, y_pct: 10, height: 110 },
+    logo_3: { x_pct: 88, y_pct: 10, height: 110 },
     ttd_kiri: { x_pct: 30, y_pct: 70, height: 130 },
     nama_kiri: { x_pct: 30, y_pct: 85, font_size: 24, font_family: 'Montserrat-Bold' },
     role_kiri: { x_pct: 30, y_pct: 88.5, font_size: 19, font_family: 'OpenSans-Regular' },
@@ -577,6 +613,12 @@ function loadInitialLayout() {
         currentLayout = JSON.parse(JSON.stringify(defaultLayout));
     }
     
+    // Migrasi: key 'logo' lama -> 'logo_1' (backward compatibility)
+    if (currentLayout['logo'] && !currentLayout['logo_1']) {
+        currentLayout['logo_1'] = { ...currentLayout['logo'] };
+    }
+    delete currentLayout['logo'];
+
     // Fallback field-by-field jika ada field yang hilang dari DB
     for (const key in defaultLayout) {
         if (!currentLayout[key]) {
@@ -658,7 +700,7 @@ function updateElementsOnCanvas() {
         }
 
         // Terapkan ukuran Gambar ke TTD / Logo
-        if ((key.startsWith('ttd_') || key === 'logo') && currentLayout[key].height) {
+        if ((key.startsWith('ttd_') || key.startsWith('logo_')) && currentLayout[key].height) {
             const img = el.querySelector('img');
             if (img) {
                 const hCqw = (currentLayout[key].height / 20);
@@ -809,7 +851,7 @@ function selectElement(el) {
         const wPct = currentLayout[key].width_pct || 45;
         document.getElementById('inspector-linewidth').value = wPct;
         document.getElementById('inspector-linewidth-badge').innerText = wPct + '%';
-    } else if (key.startsWith('ttd_') || key === 'logo') {
+    } else if (key.startsWith('ttd_') || key.startsWith('logo_')) {
         imgHeightContainer.classList.remove('d-none');
         const imgH = currentLayout[key].height || 120;
         document.getElementById('inspector-imgheight').value = imgH;
@@ -844,7 +886,9 @@ function deselectElement() {
 
 function getElementReadableName(key) {
     const names = {
-        logo: "Logo Tambahan / Mitra",
+        logo_1: "Logo 1 (Kiri)",
+        logo_2: "Logo 2 (Tengah)",
+        logo_3: "Logo 3 (Kanan)",
         judul: "Judul Sertifikat",
         preamble: "Teks Pengantar (Preamble)",
         nama: "Nama Asisten",
@@ -918,7 +962,7 @@ function updateSelectedSize() {
         if (line) {
             line.style.width = wPct + 'cqw';
         }
-    } else if (selectedElementId.startsWith('ttd_') || selectedElementId === 'logo') {
+    } else if (selectedElementId.startsWith('ttd_') || selectedElementId.startsWith('logo_')) {
         const imgH = parseInt(document.getElementById('inspector-imgheight').value) || 120;
         currentLayout[selectedElementId].height = imgH;
         document.getElementById('inspector-imgheight-badge').innerText = imgH + 'px';
@@ -1000,23 +1044,36 @@ function saveLayoutCoords() {
     })
     .then(data => {
         if (data.status === 'success') {
-            alert(data.message || 'Tata letak berhasil disimpan.');
-            const modalEl = document.getElementById('visualEditorModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-            window.location.reload();
+            showEditorToast(data.message || 'Tata letak berhasil disimpan.', 'success');
+            setTimeout(() => {
+                const modalEl = document.getElementById('visualEditorModal');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+                window.location.reload();
+            }, 1200);
         } else {
-            alert('Gagal menyimpan tata letak: ' + (data.message || 'Error tidak diketahui'));
+            showEditorToast('Gagal: ' + (data.message || 'Error tidak diketahui'), 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Gagal menyimpan tata letak: ' + error.message);
+        showEditorToast('Gagal: ' + error.message, 'danger');
     })
     .finally(() => {
         saveBtn.disabled = false;
         saveBtn.innerHTML = originalText;
     });
+}
+
+function showEditorToast(msg, type = 'success') {
+    const toast = document.getElementById('editor-toast');
+    const toastMsg = document.getElementById('editor-toast-msg');
+    if (!toast || !toastMsg) return;
+    toast.className = 'alert alert-' + type + ' py-2 px-3 small mb-0';
+    toast.style.borderRadius = '8px';
+    toastMsg.innerText = msg;
+    toast.classList.remove('d-none');
+    setTimeout(() => toast.classList.add('d-none'), 4000);
 }
 </script>
 <?php endif; ?>

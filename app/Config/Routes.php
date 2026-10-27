@@ -83,6 +83,7 @@ $routes->group('', ['filter' => ['session_security', 'permission:asisten_admin']
     $routes->post('/admin/users/create', 'Admin\Users::create');
     $routes->post('/admin/users/update/(:num)', 'Admin\Users::update/$1');
     $routes->post('/admin/users/delete/(:num)', 'Admin\Users::delete/$1');
+    $routes->post('/admin/users/selesaikan-semua', 'Admin\Users::selesaikanSemuaStatus');
 });
 
 // --- KELOLA GALERI ---
@@ -169,6 +170,7 @@ $routes->group('', ['filter' => ['session_security', 'permission:sertifikat_admi
         $routes->post('delete-config', 'SertifikatController::deleteConfig');
         $routes->put('status/(:num)', 'SertifikatController::updateStatusTugas/$1');
         $routes->post('status/(:num)', 'SertifikatController::updateStatusTugas/$1');
+        $routes->post('status-bulk', 'SertifikatController::updateStatusBulk');
     });
 });
 

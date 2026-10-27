@@ -162,6 +162,46 @@ class SertifikatController extends BaseController
     }
 
     /**
+     * Endpoint untuk mengubah status tugas asisten secara massal (Bulk Update)
+     */
+    public function updateStatusBulk()
+    {
+        try {
+            $input = $this->request->getJSON(true);
+        } catch (\Exception $e) {
+            $input = null;
+        }
+        if (empty($input)) {
+            $input = $this->request->getPost();
+        }
+
+        $statusBaru = $input['status_tugas'] ?? 'selesai';
+        $allowed    = ['selesai', 'belum selesai'];
+
+        if (! in_array($statusBaru, $allowed)) {
+            return $this->response->setJSON(['status' => 'error', 'message' => "Nilai status tidak valid."])->setStatusCode(422);
+        }
+
+        $idPeriode = $input['id_periode'] ?? null;
+
+        $builder = $this->asistenPeriodeModel->builder();
+        if (!empty($idPeriode) && $idPeriode !== 'all') {
+            $builder->where('id_periode', (int)$idPeriode);
+        }
+
+        $builder->update([
+            'status_tugas' => $statusBaru,
+            'updated_at'   => date('Y-m-d H:i:s')
+        ]);
+
+        $statusLabel = $statusBaru === 'selesai' ? 'Selesai' : 'Masih Berjalan';
+        return $this->response->setJSON([
+            'status'  => 'success',
+            'message' => "Seluruh masa jabatan asisten berhasil diubah menjadi '{$statusLabel}'."
+        ]);
+    }
+
+    /**
      * Endpoint untuk merender Pratinjau Sertifikat (Inline Image) di halaman Admin
      */
     public function preview()

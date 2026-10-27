@@ -391,4 +391,100 @@ class Users extends BaseController
 
         return view('asisten_admin_list_view', $data);
     }
+
+    /**
+     * Mengubah seluruh status tugas asisten mahasiswa menjadi 'selesai' atau 'belum selesai' secara massal
+     */
+    public function selesaikanSemuaStatus()
+    {
+        $isAjax = $this->request->isAJAX();
+        $idPeriode = $this->request->getPost('id_periode');
+        $status = $this->request->getPost('status_tugas') ?? 'selesai';
+
+        if (!in_array($status, ['selesai', 'belum selesai'])) {
+            $status = 'selesai';
+        }
+
+        try {
+            $this->userModel->db->transStart();
+
+            // 1. Ambil seluruh user asisten (role_id = 2)
+            $asistenUsers = $this->userModel->where('role_id', 2)->findAll();
+            if (empty($asistenUsers)) {
+                $this->userModel->db->transRollback();
+                $msg = 'Tidak ada user asisten mahasiswa yang terdaftar.';
+                return $isAjax 
+                    ? $this->response->setJSON(['success' => false, 'message' => $msg]) 
+                    : redirect()->to('/asisten_admin')->with('error', $msg);
+            }
+
+            $asistenUserIds = array_column($asistenUsers, 'id');
+
+            // 2. Query ke asisten_periode untuk asisten-asisten tersebut
+            $builder = $this->asistenPeriodeModel->builder();
+            $builder->whereIn('id_user', $asistenUserIds);
+
+            if (!empty($idPeriode) && $idPeriode !== 'all') {
+                $builder->where('id_periode', (int)$idPeriode);
+            }
+
+            // Update record asisten_periode yang sudah ada
+            $builder->update([
+                'status_tugas' => $status,
+                'updated_at'   => date('Y-m-d H:i:s')
+            ]);
+
+            // 3. Untuk mahasiswa asisten yang belum memiliki relasi di asisten_periode sama sekali (jika target 'all'):
+            if (empty($idPeriode) || $idPeriode === 'all') {
+                $existingRelasi = $this->asistenPeriodeModel
+                    ->whereIn('id_user', $asistenUserIds)
+                    ->findAll();
+                $existingUserIds = array_column($existingRelasi, 'id_user');
+
+                $missingUserIds = array_diff($asistenUserIds, $existingUserIds);
+                if (!empty($missingUserIds)) {
+                    $defaultPeriode = $this->periodeModel->orderBy('id_periode', 'DESC')->first();
+                    $defaultPeriodeId = $defaultPeriode['id_periode'] ?? 1;
+
+                    $newRecords = [];
+                    foreach ($missingUserIds as $mUserId) {
+                        $newRecords[] = [
+                            'id_user'      => $mUserId,
+                            'id_periode'   => $defaultPeriodeId,
+                            'jabatan'      => 'Asisten Praktikum',
+                            'status_tugas' => $status,
+                            'created_at'   => date('Y-m-d H:i:s'),
+                            'updated_at'   => date('Y-m-d H:i:s'),
+                        ];
+                    }
+                    if (!empty($newRecords)) {
+                        $this->asistenPeriodeModel->insertBatch($newRecords);
+                    }
+                }
+            }
+
+            $this->userModel->db->transComplete();
+
+            $statusLabel = ($status === 'selesai') ? 'Selesai' : 'Masih Berjalan';
+            $msg = "Seluruh masa jabatan asisten mahasiswa berhasil diubah menjadi '{$statusLabel}'.";
+
+            if ($isAjax) {
+                return $this->response->setJSON([
+                    'success' => true, 
+                    'message' => $msg,
+                    'csrf_token' => csrf_hash()
+                ]);
+            }
+
+            return redirect()->to('/asisten_admin')->with('success', $msg);
+
+        } catch (\Exception $e) {
+            $this->userModel->db->transRollback();
+            $errorMsg = 'Terjadi kesalahan sistem: ' . $e->getMessage();
+            if ($isAjax) {
+                return $this->response->setStatusCode(500)->setJSON(['success' => false, 'message' => $errorMsg]);
+            }
+            return redirect()->to('/asisten_admin')->with('error', $errorMsg);
+        }
+    }
 }

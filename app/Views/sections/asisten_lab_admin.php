@@ -98,6 +98,9 @@
                         <button id="export-excel-btn" class="btn btn-sm btn-success text-nowrap">
                             <i class="fas fa-file-excel me-1"></i> Export Excel
                         </button>
+                        <button id="selesaikan-semua-btn" class="btn btn-sm btn-success text-nowrap shadow-sm" data-bs-toggle="modal" data-bs-target="#modalSelesaikanSemua" title="Selesaikan seluruh status masa jabatan mahasiswa asisten sekaligus">
+                            <i class="fas fa-check-double me-1"></i> Selesaikan Masa Jabatan
+                        </button>
                         <button id="add-data-btn" class="btn btn-sm btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#dataModal">
                             <i class="fas fa-plus me-1"></i> Tambah Anggota
                         </button>
@@ -249,6 +252,65 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
                 <button type="button" class="btn btn-primary" id="save-data-btn">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Selesaikan Seluruh Masa Jabatan Mahasiswa -->
+<div class="modal fade" id="modalSelesaikanSemua" tabindex="-1" aria-labelledby="modalSelesaikanSemuaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalSelesaikanSemuaLabel">
+                    <i class="fas fa-check-double me-2"></i>Selesaikan Masa Jabatan Mahasiswa
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-success bg-opacity-10 text-success p-3 rounded-circle me-3">
+                        <i class="fas fa-user-graduate fa-2x"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1 fw-bold text-dark">Ubah Status Seluruh Mahasiswa</h6>
+                        <p class="text-muted small mb-0">Klik tombol konfirmasi untuk menyelesaikan masa jabatan seluruh asisten mahasiswa sekaligus.</p>
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2 px-3 small border-0 mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Asisten mahasiswa dengan status <strong>Selesai</strong> dapat langsung mengklaim dan mengunduh sertifikat asisten praktikum.
+                </div>
+
+                <form id="form-selesaikan-semua">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-secondary">Pilih Periode Kepengurusan</label>
+                        <select class="form-select form-select-sm" name="id_periode" id="bulk-periode-select">
+                            <option value="all">Semua Periode (Seluruh Asisten Mahasiswa)</option>
+                            <?php if (!empty($listPeriode)): ?>
+                                <?php foreach ($listPeriode as $p): ?>
+                                    <option value="<?= esc($p['id_periode']) ?>"><?= esc($p['nama_periode']) ?></option>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </select>
+                        <div class="form-text small">Pilih "Semua Periode" untuk mengubah status seluruh asisten tanpa terkecuali.</div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold small text-secondary">Aksi Status</label>
+                        <select class="form-select form-select-sm" name="status_tugas" id="bulk-status-select">
+                            <option value="selesai" selected>Tandai Selesai (Rekomendasi)</option>
+                            <option value="belum selesai">Kembalikan ke Masih Berjalan (Reset)</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-sm btn-success px-3 shadow-sm" id="confirm-selesaikan-semua-btn">
+                    <i class="fas fa-check me-1"></i> Ya, Selesaikan Semua
+                </button>
             </div>
         </div>
     </div>
@@ -736,6 +798,76 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     });
+
+    // Bulk Update Status Tugas Mahasiswa (1 Tombol Selesai Semua)
+    const confirmSelesaikanSemuaBtn = document.getElementById('confirm-selesaikan-semua-btn');
+    if (confirmSelesaikanSemuaBtn) {
+        confirmSelesaikanSemuaBtn.addEventListener('click', async function() {
+            const form = document.getElementById('form-selesaikan-semua');
+            const formData = new FormData(form);
+            const activeToken = getLatestCsrfToken();
+            const baseUrl = '<?= site_url() ?>';
+            
+            const originalHtml = confirmSelesaikanSemuaBtn.innerHTML;
+            confirmSelesaikanSemuaBtn.disabled = true;
+            confirmSelesaikanSemuaBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Memproses...';
+
+            try {
+                const response = await fetch(baseUrl + '/admin/users/selesaikan-semua', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': activeToken
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        if (errorJson.message) errorMessage = errorJson.message;
+                    } catch (e) {}
+
+                    if (response.status === 401 || response.status === 403) {
+                        alert('Session expired. Please login again.');
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                let result;
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    const textResult = await response.text();
+                    try {
+                        result = JSON.parse(textResult);
+                    } catch (e) {
+                        throw new Error('Response is not valid JSON');
+                    }
+                }
+
+                if (result && result.success) {
+                    sessionStorage.setItem('flashMessage', result.message || 'Status masa jabatan seluruh mahasiswa berhasil diperbarui!');
+                    sessionStorage.setItem('flashType', 'success');
+                    location.reload();
+                } else {
+                    alert((result && result.message) || 'Gagal memperbarui status');
+                    confirmSelesaikanSemuaBtn.disabled = false;
+                    confirmSelesaikanSemuaBtn.innerHTML = originalHtml;
+                }
+            } catch (error) {
+                alert('Terjadi kesalahan: ' + error.message);
+                confirmSelesaikanSemuaBtn.disabled = false;
+                confirmSelesaikanSemuaBtn.innerHTML = originalHtml;
+            }
+        });
+    }
+
     updateView();
 });
 </script>
